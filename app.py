@@ -10,9 +10,16 @@ import hashlib
 import hmac
 import secrets
 import random
+import queue
 from collections import deque
 from datetime import datetime
+from streamlit_webrtc import webrtc_streamer, WebRtcMode, RTCConfiguration
 import db  # database layer (db.py)
+
+# Browser-camera connection settings (the server itself has no webcam).
+RTC_CONFIG = RTCConfiguration(
+    {"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]}
+)
 
 # ═════════════════════════════════════════════════════════════════════════
 #  VOICEOFHANDS — v2
@@ -1321,10 +1328,17 @@ if st.session_state.page == "Live Translator":
 
             cc1, cc2 = st.columns([3, 1])
             with cc1:
-                if st.button("⏹ Stop camera" if st.session_state.run_cam_flag else "📷 Start camera",
-                             key="cam_toggle", use_container_width=True,
-                             type="secondary" if st.session_state.run_cam_flag else "primary"):
-                    st.session_state.run_cam_flag = not st.session_state.run_cam_flag; st.rerun()
+                # Browser camera (the server has no webcam). The component supplies its own
+                # START / STOP button; the raw video is hidden so only the processed frame
+                # (skeleton, HUD, chips) is shown in frame_placeholder below.
+                webrtc_ctx = webrtc_streamer(
+                    key="voh-cam",
+                    mode=WebRtcMode.SENDONLY,
+                    rtc_configuration=RTC_CONFIG,
+                    media_stream_constraints={"video": True, "audio": False},
+                    video_html_attrs={"style": {"display": "none"}, "autoPlay": True, "muted": True},
+                )
+                st.session_state.run_cam_flag = bool(webrtc_ctx.state.playing)
             with cc2:
                 if st.button("↺ Clear", key="reset_word", use_container_width=True):
                     st.session_state.current_word = []; st.rerun()
@@ -1625,14 +1639,10 @@ if st.session_state.page == "Live Translator":
             time.sleep(0.3)
         st.session_state.was_camera_on = True
         CAMERA_WIDTH, CAMERA_HEIGHT = RESOLUTION_PRESETS[resolution_choice]
-        cap = cv2.VideoCapture(0)
-        for prop, val in [(cv2.CAP_PROP_FRAME_WIDTH, CAMERA_WIDTH), (cv2.CAP_PROP_FRAME_HEIGHT, CAMERA_HEIGHT),
-                           (cv2.CAP_PROP_FPS, 30), (cv2.CAP_PROP_BUFFERSIZE, 1)]:
-            try: cap.set(prop, val)
-            except Exception: pass
+        receiver = webrtc_ctx.video_receiver
 
-        if not cap.isOpened():
-            status_placeholder.error("Camera unavailable. Close other apps using it and try again.")
+        if receiver is None:
+            status_placeholder.info("Connecting to your camera… allow camera access in the browser.")
         else:
             status_placeholder.markdown('<span style="color:var(--accent);font-family:JetBrains Mono,monospace;font-size:12px;">● Capture active — sign to translate</span>', unsafe_allow_html=True)
             frame_counter, cached_res, consecutive_errors = 0, None, 0
@@ -1640,18 +1650,11 @@ if st.session_state.page == "Live Translator":
             try:
                 while True:
                     try:
-                        cap.grab(); ret, frame = cap.retrieve()
-                        if not ret:
-                            ret, frame = cap.read()
-                            if not ret:
-                                consecutive_errors += 1
-                                if consecutive_errors >= 20:
-                                    status_placeholder.error("Camera stopped responding. Toggle camera off/on."); break
-                                continue
-                    except cv2.error:
-                        consecutive_errors += 1
-                        if consecutive_errors >= 20: break
-                        time.sleep(0.02); continue
+                        vf = receiver.get_frame(timeout=1)
+                    except queue.Empty:
+                        continue
+                    frame = vf.to_ndarray(format="bgr24")
+                    frame = cv2.resize(frame, (CAMERA_WIDTH, CAMERA_HEIGHT))
                     consecutive_errors = 0
                     if MIRROR_CAMERA: frame = cv2.flip(frame, 1)
                     frame = apply_zoom(frame, zoom_level)
@@ -1865,7 +1868,7 @@ if st.session_state.page == "Live Translator":
                     frame_placeholder.image(frame, channels="BGR", use_container_width=True)
                     if not TURBO_MODE: time.sleep(0.004)
             finally:
-                cap.release()
+                pass  # nothing to release — frames come from the browser via WebRTC
     else:
         st.session_state.was_camera_on = False
         with frame_placeholder.container(): idle_scene()

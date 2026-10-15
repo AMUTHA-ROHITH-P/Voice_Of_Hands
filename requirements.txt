@@ -6,3 +6,4 @@ sqlalchemy>=2.0
 psycopg2-binary
 requests
 deep-translator
+streamlit-webrtc
