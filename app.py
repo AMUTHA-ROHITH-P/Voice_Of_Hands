@@ -11,6 +11,7 @@ import hmac
 import secrets
 import random
 import queue
+import base64
 from collections import deque
 from datetime import datetime
 from streamlit_webrtc import webrtc_streamer, WebRtcMode, RTCConfiguration
@@ -1865,7 +1866,15 @@ if st.session_state.page == "Live Translator":
                         if _minfo: frame = draw_timer_overlay(frame, _minfo)
                     except cv2.error:
                         pass
-                    frame_placeholder.image(frame, channels="BGR", use_container_width=True)
+                    # Send the frame inline as a base64 JPEG instead of st.image(). st.image() saves every
+                    # frame to Streamlit's media-file server, and updating it many times a second makes that
+                    # server crash ("Expected ASGI message 'http.response.start'") so the picture never shows.
+                    _ok, _jpg = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), 70])
+                    if _ok:
+                        frame_placeholder.markdown(
+                            f'<img src="data:image/jpeg;base64,{base64.b64encode(_jpg.tobytes()).decode()}" '
+                            f'style="width:100%;border-radius:16px;display:block;" />',
+                            unsafe_allow_html=True)
                     if not TURBO_MODE: time.sleep(0.004)
             finally:
                 pass  # nothing to release — frames come from the browser via WebRTC
