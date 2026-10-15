@@ -1,0 +1,14 @@
+{
+  "admin": {
+    "display_name": "Administrator",
+    "role": "Administrator",
+    "salt": "50daa8f36cccff18f2501f5718169bf1",
+    "hash": "3ee9a1d54d5bb01d6ce8dd3e3b7237f75cff14c9271554a72b32d380fb34b049"
+  },
+  "user": {
+    "display_name": "Demo User",
+    "role": "User",
+    "salt": "57b720bfb8c39fd21d7fa4d9d4dfe11e",
+    "hash": "e4dd2e2a122fa8a5c603fc1a42537f2f18851714ef4b04626774726698e193aa"
+  }
+}

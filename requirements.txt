@@ -1,0 +1,12 @@
+streamlit
+opencv-python
+mediapipe
+numpy
+sqlalchemy>=2.0
+psycopg2-binary
+requests
+deep-translator
+# Optional offline translation (large download):
+# transformers
+# torch
+# sentencepiece
