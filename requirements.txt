@@ -1,12 +1,16 @@
 streamlit
-opencv-python-headless
-mediapipe==0.10.14
+opencv-python-headless==4.11.0.86
+mediapipe==0.10.14 --no-deps
+absl-py
+attrs
+flatbuffers
+jax
+jaxlib
+matplotlib
+protobuf<5
+sounddevice
 numpy<2
 sqlalchemy>=2.0
 psycopg2-binary
 requests
 deep-translator
-# Optional offline translation (large download):
-# transformers
-# torch
-# sentencepiece
