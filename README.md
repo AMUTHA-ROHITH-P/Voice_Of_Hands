@@ -2,7 +2,7 @@
 
 **A browser-based Indian Sign Language (ISL) communication tool that recognizes hand signs through your camera and turns them into text, so signers and hearing people can talk to each other.**
 
-> Final year project by **Amutha Rohith P**
+> Final year project by **Amutha Rohith P, HARISH T, DHARUNISH B**
 
 <!-- Add a demo GIF or screenshots here, e.g.
 ![Demo](docs/demo.gif)
