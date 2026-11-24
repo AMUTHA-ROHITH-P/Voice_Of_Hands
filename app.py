@@ -294,7 +294,7 @@ def donut(pct, size=58, stroke=6):
 # AUTH  (users are stored in the database — see db.py)
 # ─────────────────────────────────────────────────────────────────────────
 # Admin signup code now comes from an environment variable (falls back to your old code).
-ADMIN_SIGNUP_CODE = os.environ.get("VOH_ADMIN_CODE", "admin0207")
+ADMIN_SIGNUP_CODE = os.environ.get("VOH_ADMIN_CODE", "")   # no default: set it in Streamlit Secrets
 
 def _hash_pw(pw, salt=None):
     salt = salt or secrets.token_hex(16)
@@ -303,6 +303,7 @@ def _hash_pw(pw, salt=None):
 def create_account(username, password, role):
     key = username.strip().lower()
     if not key: return False, "Username can't be empty."
+    if key == "guest": return False, "That username is reserved."
     if len(password) < 4: return False, "Password must be at least 4 characters."
     salt, digest = _hash_pw(password)
     if not db.create_user(key, username.strip(), salt, digest, role):
@@ -338,6 +339,7 @@ def render_auth_gate():
                     ok, name, role = authenticate(u, p)
                     if ok:
                         st.session_state.authenticated, st.session_state.auth_user, st.session_state.auth_role = True, name, role
+                        st.session_state.is_guest = False
                         st.rerun()
                     else:
                         st.error("Invalid username or password.")
@@ -352,11 +354,16 @@ def render_auth_gate():
                 if st.button("Create account", type="primary", use_container_width=True, key="su_btn"):
                     if sp != sp2:
                         st.error("Passwords don't match.")
-                    elif role_choice.startswith("Administrator") and code != ADMIN_SIGNUP_CODE:
+                    elif role_choice.startswith("Administrator") and (not ADMIN_SIGNUP_CODE or code != ADMIN_SIGNUP_CODE):
                         st.error("Incorrect administrator code.")
                     else:
                         ok, msg = create_account(su, sp, "Administrator" if role_choice.startswith("Administrator") else "User")
                         (st.success if ok else st.error)(msg)
+        st.write("")
+        if st.button("👋 Try as Guest (no sign-up needed)", use_container_width=True, key="guest_btn"):
+            st.session_state.authenticated, st.session_state.auth_user, st.session_state.auth_role = True, "Guest", "User"
+            st.session_state.is_guest = True
+            st.rerun()
         st.markdown('<div class="auth-sub" style="margin-top:14px;">Users get recognition + the conversation board. '
                     'Administrators can also train new signs.</div>', unsafe_allow_html=True)
 
@@ -1057,6 +1064,8 @@ for k, v in defs.items():
 # Load this user's saved phrases + activity log from the database once per login.
 if "history_loaded" not in st.session_state:
     try:
+        if st.session_state.get("is_guest"):
+            raise RuntimeError("guest sessions keep no saved history")
         _u = st.session_state.auth_user.lower()
         st.session_state.sentence_history = deque(db.list_phrases(_u), maxlen=30)
         st.session_state.activity_log = deque(db.list_activity(_u), maxlen=14)
@@ -1066,6 +1075,8 @@ if "history_loaded" not in st.session_state:
 
 def log_activity(msg, kind="info"):
     st.session_state.activity_log.append((datetime.now().strftime("%H:%M:%S"), msg, kind))
+    if st.session_state.get("is_guest"):
+        return
     try:
         db.add_activity((st.session_state.auth_user or "").lower(), msg, kind)
     except Exception:
@@ -1116,6 +1127,7 @@ with st.sidebar:
         for k in ("authenticated", "auth_user", "auth_role"):
             st.session_state[k] = False if k == "authenticated" else None
         st.session_state.pop("history_loaded", None)
+        st.session_state.pop("is_guest", None)
         st.rerun()
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -1611,7 +1623,8 @@ if st.session_state.page == "Live Translator":
         if save_clicked and current_word_text:
             st.session_state.sentence_history.appendleft((datetime.now().strftime("%Y-%m-%d %H:%M:%S"), current_word_text))
             try:
-                db.add_phrase(st.session_state.auth_user.lower(), current_word_text)
+                if not st.session_state.get("is_guest"):
+                    db.add_phrase(st.session_state.auth_user.lower(), current_word_text)
             except Exception:
                 pass
             log_activity(f"Saved sentence → {current_word_text}"); do_speak(current_word_text)
